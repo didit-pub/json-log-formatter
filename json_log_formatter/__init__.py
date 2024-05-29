@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone
+import django.utils.timezone
 
 import json
 
@@ -90,7 +91,7 @@ class JSONFormatter(logging.Formatter):
         except (TypeError, ValueError, OverflowError):
             try:
                 return self.json_lib.dumps(record)
-            except (TypeError, ValueError, OverflowError):
+            except (TypeError, ValueError, OverflowError) as e:
                 return '{}'
 
     def extra_from_record(self, record):
@@ -204,3 +205,48 @@ class VerboseJSONFormatter(JSONFormatter):
         extra['thread'] = record.thread
         extra['threadName'] = record.threadName
         return super(VerboseJSONFormatter, self).json_record(message, extra, record)
+
+
+class LokiJSONFormatter(JSONFormatter):
+    def json_record(self, message: object, extra: dict, record: logging.LogRecord) -> dict:
+        extra['message'] = message
+
+        # Include builtins
+        extra['level'] = record.levelname
+        extra['name'] = record.name
+
+        if 'time' not in extra:
+            extra['py_time'] = django.utils.timezone.now()
+        else:
+            extra['py_time'] = extra['time']
+            del extra['time']
+
+        if record.exc_info:
+            extra['exc_info'] = self.formatException(record.exc_info)
+
+        extra['filename'] = record.filename
+        extra['func_name'] = record.funcName
+        extra['levelname'] = record.levelname
+        extra['lineno'] = record.lineno
+        extra['module'] = record.module
+        extra['pathname'] = record.pathname
+        extra['process'] = record.process
+        extra['process_name'] = record.processName
+        if hasattr(record, 'stack_info'):
+            extra['stack_info'] = record.stack_info
+        else:
+            extra['stack_info'] = None
+        extra['thread'] = record.thread
+        extra['thread_name'] = record.threadName
+    
+        if 'request' in extra:
+            request = extra['request']
+            extra['request'] = {
+                'method': request.method,
+                'path': request.path,
+                'GET': request.GET,
+                'POST': request.POST,
+                'COOKIES': request.COOKIES,
+                'META': request.META,
+            }
+        return extra
